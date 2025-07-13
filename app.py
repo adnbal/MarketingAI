@@ -5,21 +5,20 @@ from twilio.rest import Client
 from textblob import TextBlob
 import time
 
-# ------------------- Twilio & API Config -------------------
+# ------------------- Twilio Config -------------------
 try:
     twilio_sid = st.secrets["twilio"]["account_sid"]
     twilio_token = st.secrets["twilio"]["auth_token"]
     whatsapp_to = st.secrets["twilio"]["whatsapp_to"]
-    scraperapi_key = st.secrets["scraperapi"]["api_key"]
 except KeyError:
-    st.error("🔐 Missing Twilio or ScraperAPI keys in `.streamlit/secrets.toml`.")
+    st.error("🔐 Twilio keys missing in `.streamlit/secrets.toml`.")
     st.stop()
 
 whatsapp_from = "whatsapp:+14155238886"
 
 # ------------------- Streamlit UI -------------------
 st.set_page_config(page_title="🦍 MightyApe Deal Watcher", layout="centered")
-st.title("🦍 MightyApe Price Alert + Sentiment + Smart Advice")
+st.title("🦍 MightyApe Price Alert + Smart Advice")
 
 url = st.text_input(
     "🔗 MightyApe Product URL:",
@@ -27,13 +26,26 @@ url = st.text_input(
 )
 target_price = st.number_input("🎯 Target Price (NZD):", min_value=1.0, value=300.0)
 
-# ------------------- Scraper with Retry -------------------
+# ------------------- Proxy Scraper Function -------------------
 def get_product_info(url):
-    scraped_url = f"http://api.scraperapi.com/?api_key={scraperapi_key}&url={url}"
+    proxies = {
+        "http": "http://103.152.112.145:80",
+        "https": "http://103.152.112.145:80"
+    }
+
+    headers = {
+        "User-Agent": (
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:117.0) "
+            "Gecko/20100101 Firefox/117.0"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.google.com/"
+    }
 
     for attempt in range(3):
         try:
-            res = requests.get(scraped_url, timeout=20)
+            res = requests.get(url, headers=headers, proxies=proxies, timeout=15)
             if res.status_code == 200:
                 soup = BeautifulSoup(res.text, "html.parser")
 
@@ -52,11 +64,11 @@ def get_product_info(url):
                 return price, title, description
             else:
                 st.warning(f"⚠️ Attempt {attempt+1}: HTTP {res.status_code}")
-        except requests.exceptions.ReadTimeout:
-            st.warning(f"⏳ Attempt {attempt+1}: Scraper timed out. Retrying...")
+        except Exception as e:
+            st.warning(f"⏳ Attempt {attempt+1} failed: {e}")
             time.sleep(2)
 
-    st.error("❌ Scraper failed after 3 retries.")
+    st.error("❌ Proxy scraper failed after 3 retries.")
     return None, None, None
 
 # ------------------- Sentiment & Scoring -------------------
@@ -73,10 +85,10 @@ def calculate_rank(price, target_price, sentiment_score):
     rank = int((0.6 * price_delta) + (0.4 * sentiment_score))
     return min(rank, 100)
 
-# ------------------- Main App Logic -------------------
+# ------------------- Main Logic -------------------
 if st.button("🔍 Check Price"):
     if not url:
-        st.warning("⚠️ Please enter a product URL.")
+        st.warning("⚠️ Please enter a valid product URL.")
     else:
         price, title, description = get_product_info(url)
         sentiment_score, sentiment_label = analyze_sentiment(description)
@@ -88,13 +100,13 @@ if st.button("🔍 Check Price"):
             st.success(f"✅ Price: ${price:,.2f}")
             st.markdown(f"💬 **Sentiment:** {sentiment_label} ({sentiment_score}%)")
             st.markdown(f"📊 **Ranking Score:** {rank_score}/100")
-            st.markdown(f"🎯 **You Save:** ${price_delta:,.2f}")
+            st.markdown(f"🎯 **Savings:** ${price_delta:,.2f}")
 
             advice = "✅ Buy now!" if rank_score >= 70 else "🤔 Wait or check reviews."
 
             if price <= target_price:
                 st.balloons()
-                st.success("🎉 Deal found — sending WhatsApp alert...")
+                st.success("🎉 Below target — sending WhatsApp alert...")
 
                 client = Client(twilio_sid, twilio_token)
                 try:
@@ -115,6 +127,6 @@ if st.button("🔍 Check Price"):
                 except Exception as sms_error:
                     st.error(f"📵 WhatsApp failed: {sms_error}")
             else:
-                st.info("⏳ Price is still above your target.")
+                st.info("⏳ Price is above your target.")
         else:
             st.error("❌ Could not extract product data.")
