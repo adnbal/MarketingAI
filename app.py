@@ -24,23 +24,31 @@ twilio_to = st.text_input("📱 Your mobile number (e.g. +6421XXXXXXX)")
 def get_mightyape_price(url):
     try:
         headers = {
-            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
+            "User-Agent": (
+                "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+                "(KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+            ),
             "Accept-Language": "en-US,en;q=0.9",
+            "Accept-Encoding": "gzip, deflate, br",
+            "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8",
+            "Connection": "keep-alive",
+            "Referer": "https://www.google.com/",
         }
+
         response = requests.get(url, headers=headers, timeout=10)
         if response.status_code != 200:
             st.error(f"❌ HTTP error: {response.status_code}")
             return None
 
         soup = BeautifulSoup(response.text, "html.parser")
-        
-        # Try specific price class
+
+        # Look for price in known HTML class
         price_element = soup.find("span", class_="buy-button-price")
         if price_element:
             price_text = price_element.text.strip().replace("$", "").replace(",", "")
             return float(price_text)
 
-        # Fallback: try regex
+        # Fallback: Regex-based price extraction
         match = re.search(r"\$\d+(?:\.\d{2})?", soup.text)
         if match:
             return float(match.group().replace("$", ""))
