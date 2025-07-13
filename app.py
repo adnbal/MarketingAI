@@ -8,21 +8,22 @@ from twilio.rest import Client
 try:
     twilio_sid = st.secrets["twilio"]["account_sid"]
     twilio_token = st.secrets["twilio"]["auth_token"]
-    twilio_from = st.secrets["twilio"]["from_number"]
+    whatsapp_to = st.secrets["twilio"]["whatsapp_to"]  # Your number: whatsapp:+6421XXXXXXX
 except KeyError:
-    st.error("🔐 Twilio credentials not found in `.streamlit/secrets.toml`.")
+    st.error("🔐 Missing Twilio credentials in `.streamlit/secrets.toml`.")
     st.stop()
+
+whatsapp_from = "whatsapp:+14155238886"  # Twilio Sandbox number
 
 # ------------------- Streamlit UI -------------------
 st.set_page_config(page_title="🦍 MightyApe Price Tracker", layout="centered")
-st.title("🦍 MightyApe Price Watcher with SMS Alerts")
+st.title("🦍 MightyApe Price Watcher with WhatsApp Alerts")
 
 url = st.text_input(
     "🔗 MightyApe product URL:",
     value="https://www.mightyape.co.nz/mn/buy/mighty-ape-ape-basics-heated-2-in-1-shiatsu-foot-and-back-massager-35128615/"
 )
 target_price = st.number_input("🎯 Target Price (NZD):", min_value=1.0, value=300.0)
-twilio_to = st.text_input("📱 Your mobile number (e.g. +6421XXXXXXX)")
 
 # ------------------- Scraper Function -------------------
 def get_mightyape_price(url):
@@ -40,23 +41,22 @@ def get_mightyape_price(url):
     }
 
     try:
-        response = requests.get(url, headers=headers, timeout=10)
-        if response.status_code != 200:
-            st.error(f"❌ HTTP error: {response.status_code}")
+        res = requests.get(url, headers=headers, timeout=10)
+        if res.status_code != 200:
+            st.error(f"❌ HTTP error: {res.status_code}")
             return None
 
-        soup = BeautifulSoup(response.text, "html.parser")
+        soup = BeautifulSoup(res.text, "html.parser")
         price_element = soup.find("span", class_="buy-button-price")
         if price_element:
             price_text = price_element.text.strip().replace("$", "").replace(",", "")
             return float(price_text)
 
-        # Fallback: Regex-based extraction
         match = re.search(r"\$\d+(?:\.\d{2})?", soup.text)
         if match:
             return float(match.group().replace("$", ""))
 
-        st.error("⚠️ Price not found on page.")
+        st.error("⚠️ Price not found.")
         return None
     except Exception as e:
         st.error(f"❌ Scraper error: {e}")
@@ -64,25 +64,26 @@ def get_mightyape_price(url):
 
 # ------------------- Main Logic -------------------
 if st.button("🔍 Check Price"):
-    if not url or not twilio_to:
-        st.warning("⚠️ Please enter both URL and your phone number.")
+    if not url:
+        st.warning("⚠️ Please enter the product URL.")
     else:
         price = get_mightyape_price(url)
         if price is not None:
             st.success(f"✅ Current Price: ${price:,.2f}")
             if price <= target_price:
                 st.balloons()
-                st.success("🎉 Below your target! Sending SMS...")
+                st.success("🎉 Below your target! Sending WhatsApp alert...")
+
                 client = Client(twilio_sid, twilio_token)
                 try:
-                    client.messages.create(
-                        body=f"🔥 Deal Alert! Price: ${price:,.2f}\n{url}",
-                        from_=twilio_from,
-                        to=twilio_to
+                    message = client.messages.create(
+                        body=f"🔥 MightyApe Deal Alert!\nPrice: ${price:,.2f}\n{url}",
+                        from_=whatsapp_from,
+                        to=whatsapp_to
                     )
-                    st.success("📲 SMS sent!")
+                    st.success("📲 WhatsApp message sent!")
                 except Exception as sms_error:
-                    st.error(f"📵 SMS failed: {sms_error}")
+                    st.error(f"📵 WhatsApp failed: {sms_error}")
             else:
                 st.info("⏳ Price is still above your target.")
         else:
