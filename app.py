@@ -5,6 +5,7 @@ from webdriver_manager.firefox import GeckoDriverManager
 from bs4 import BeautifulSoup
 from textblob import TextBlob
 from twilio.rest import Client
+import re
 
 # ------------------- Twilio Config -------------------
 try:
@@ -12,7 +13,7 @@ try:
     twilio_token = st.secrets["twilio"]["auth_token"]
     whatsapp_to = st.secrets["twilio"]["whatsapp_to"]
 except KeyError:
-    st.error("🔐 Twilio keys missing in `.streamlit/secrets.toml`.")
+    st.error("🔐 Twilio credentials missing in `.streamlit/secrets.toml`.")
     st.stop()
 
 whatsapp_from = "whatsapp:+14155238886"
@@ -21,11 +22,17 @@ whatsapp_from = "whatsapp:+14155238886"
 st.set_page_config(page_title="🦍 MightyApe Deal Watcher", layout="centered")
 st.title("🦍 MightyApe Price Alert + Smart Advice")
 
-url = st.text_input(
-    "🔗 MightyApe Product URL:",
-    value="https://www.mightyape.co.nz/product/mighty-ape-heated-2-in-1-massager/35128615"
-)
+url = st.text_input("🔗 MightyApe Product URL:")
 target_price = st.number_input("🎯 Target Price (NZD):", min_value=1.0, value=300.0)
+
+# ------------------- URL Cleaner -------------------
+def clean_mightyape_url(raw_url):
+    if "/mn/buy/" in raw_url:
+        match = re.search(r"(\d{7,})/?$", raw_url)
+        if match:
+            product_id = match.group(1)
+            return f"https://www.mightyape.co.nz/product/temp-title/{product_id}"
+    return raw_url
 
 # ------------------- Selenium Scraper -------------------
 def get_product_info_selenium(url):
@@ -74,9 +81,10 @@ def calculate_rank(price, target_price, sentiment_score):
 # ------------------- Main Logic -------------------
 if st.button("🔍 Check Price"):
     if not url:
-        st.warning("⚠️ Please enter a valid product URL.")
+        st.warning("⚠️ Please enter a valid MightyApe product URL.")
     else:
-        price, title, description = get_product_info_selenium(url)
+        final_url = clean_mightyape_url(url)
+        price, title, description = get_product_info_selenium(final_url)
         sentiment_score, sentiment_label = analyze_sentiment(description)
 
         if price is not None:
@@ -104,7 +112,7 @@ if st.button("🔍 Check Price"):
                             f"💬 Sentiment: {sentiment_label} ({sentiment_score}%)\n"
                             f"📊 Ranking Score: {rank_score}/100\n"
                             f"🤖 Advice: {advice}\n"
-                            f"🔗 {url}"
+                            f"🔗 {final_url}"
                         ),
                         from_=whatsapp_from,
                         to=whatsapp_to
