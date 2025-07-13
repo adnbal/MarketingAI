@@ -16,7 +16,8 @@ except KeyError:
 # ------------------- Streamlit UI -------------------
 st.set_page_config(page_title="🦍 MightyApe Price Tracker", layout="centered")
 st.title("🦍 MightyApe Price Watcher with SMS Alerts")
-url = st.text_input("🔗 Enter MightyApe product URL:")
+
+url = st.text_input("🔗 Enter MightyApe product URL (must be a direct product page):")
 target_price = st.number_input("🎯 Target Price (NZD):", min_value=1.0, value=100.0)
 twilio_to = st.text_input("📱 Your mobile number (e.g. +6421XXXXXXX)")
 
@@ -76,6 +77,7 @@ if st.button("🔍 Check Price"):
                         from_=twilio_from,
                         to=twilio_to
                     )
+                    st.success("📲 SMS sent successfully!")
                 except Exception as sms_error:
                     st.error(f"📵 SMS failed: {sms_error}")
             else:
