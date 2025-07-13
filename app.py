@@ -1,63 +1,65 @@
 import streamlit as st
-from selenium import webdriver
-from selenium.webdriver.chrome.options import Options
-from webdriver_manager.chrome import ChromeDriverManager
+import requests
+from bs4 import BeautifulSoup
 from twilio.rest import Client
 
-# --- Streamlit Page Setup ---
-st.set_page_config(page_title="PBTech Price Watcher", layout="centered")
-st.title("📦 PBTech Price Drop Notifier")
+# --- Page Config ---
+st.set_page_config(page_title="📦 TheMarket Price Watcher", layout="centered")
+st.title("🛒 TheMarket NZ Price Watcher with SMS Alert")
 
-# --- User Input ---
-url = st.text_input("🔗 Enter PBTech Product URL")
-target_price = st.number_input("💰 Desired Price (NZD)", min_value=0.0, step=1.0)
-phone_number = st.text_input("📱 Your Mobile Number (e.g., +6421xxxxxxx)")
+# --- User Inputs ---
+url = st.text_input("🔗 Paste a TheMarket product URL:")
+target_price = st.number_input("🎯 Your Target Price (NZD):", min_value=1.0, value=100.0)
+user_phone = st.text_input("📱 Your Mobile Number (e.g., +6421XXXXXXX)")
 
-# --- Twilio Setup (stored in .streamlit/secrets.toml) ---
+# --- Twilio Config ---
 try:
-    sid = st.secrets["TWILIO_ACCOUNT_SID"]
-    token = st.secrets["TWILIO_AUTH_TOKEN"]
-    from_number = st.secrets["TWILIO_PHONE_NUMBER"]
-except Exception:
-    st.error("🔐 Twilio credentials not found in Streamlit secrets.")
-    st.stop()
+    twilio_sid = st.secrets["twilio"]["account_sid"]
+    twilio_token = st.secrets["twilio"]["auth_token"]
+    twilio_from = st.secrets["twilio"]["from_number"]
+except:
+    st.warning("🔐 Twilio credentials not found in `.streamlit/secrets.toml`")
 
-# --- Selenium Price Scraper ---
-def get_pbtech_price(url):
-    options = Options()
-    options.add_argument("--headless")
-    options.add_argument("--disable-gpu")
-    options.add_argument("--no-sandbox")
-    options.add_argument("--disable-dev-shm-usage")
-
-    driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
-
+# --- Price Scraper ---
+def get_market_price(url):
     try:
-        driver.get(url)
-        price_elem = driver.find_element("css selector", "span.price")
-        price_text = price_elem.text.strip().replace("$", "").replace(",", "")
+        headers = {
+            "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)"
+        }
+        r = requests.get(url, headers=headers, timeout=10)
+        soup = BeautifulSoup(r.text, "html.parser")
+        price_span = soup.find("span", {"data-testid": "product-price"})
+
+        if not price_span:
+            return None
+
+        price_text = price_span.text.strip().replace("$", "").replace(",", "")
         return float(price_text)
     except Exception as e:
-        print("Scraping error:", e)
+        st.error(f"❌ Error scraping price: {e}")
         return None
-    finally:
-        driver.quit()
 
-# --- App Logic ---
-if st.button("🔍 Check Price Now"):
-    if not url or not phone_number:
-        st.warning("⚠️ Please fill in all fields.")
-    else:
-        st.write("🔎 Fetching price from PBTech...")
-        price = get_pbtech_price(url)
+# --- Main Action ---
+if st.button("🔍 Check Price"):
+    if url and user_phone:
+        price = get_market_price(url)
         if price is not None:
-            st.success(f"🛒 Current Price: ${price:,.2f}")
+            st.success(f"✅ Current Price: ${price:,.2f}")
             if price <= target_price:
-                client = Client(sid, token)
-                message = f"📢 Deal Alert: PBTech price dropped to ${price:,.2f}!\n{url}"
-                client.messages.create(to=phone_number, from_=from_number, body=message)
-                st.success("✅ SMS alert sent!")
+                st.success("🎉 Price is below your target! Sending SMS...")
+                try:
+                    client = Client(twilio_sid, twilio_token)
+                    client.messages.create(
+                        body=f"🔥 Deal Alert on TheMarket!\nPrice: ${price:,.2f}\n{url}",
+                        from_=twilio_from,
+                        to=user_phone
+                    )
+                    st.balloons()
+                except Exception as e:
+                    st.error(f"❌ SMS failed: {e}")
             else:
-                st.info("💤 Price is still above your target.")
+                st.info("⏳ Price is still above your target.")
         else:
-            st.error("❌ Could not fetch price. Check the URL or try another product.")
+            st.error("❌ Could not find price. Make sure the URL is a valid TheMarket product page.")
+    else:
+        st.warning("⚠️ Please enter both a valid URL and phone number.")
