@@ -10,7 +10,7 @@ try:
     twilio_token = st.secrets["twilio"]["auth_token"]
     whatsapp_to = st.secrets["twilio"]["whatsapp_to"]  # Format: whatsapp:+6421XXXXXXX
 except KeyError:
-    st.error("🔐 Missing Twilio credentials in `.streamlit/secrets.toml`.")
+    st.error("🔐 Missing Twilio credentials in Streamlit secrets.")
     st.stop()
 
 whatsapp_from = "whatsapp:+14155238886"  # Twilio Sandbox number
@@ -52,12 +52,14 @@ def get_mightyape_price(url):
             price_text = price_element.text.strip().replace("$", "").replace(",", "")
             return float(price_text)
 
+        # Fallback regex
         match = re.search(r"\$\d+(?:\.\d{2})?", soup.text)
         if match:
             return float(match.group().replace("$", ""))
 
         st.error("⚠️ Price not found.")
         return None
+
     except Exception as e:
         st.error(f"❌ Scraper error: {e}")
         return None
@@ -72,10 +74,10 @@ if st.button("🔍 Check Price"):
             st.success(f"✅ Current Price: ${price:,.2f}")
             if price <= target_price:
                 st.balloons()
-                st.success("🎉 Below your target! Sending WhatsApp alert...")
+                st.success("🎉 Price is below your target! Sending WhatsApp alert...")
 
-                client = Client(twilio_sid, twilio_token)
                 try:
+                    client = Client(twilio_sid, twilio_token)
                     message = client.messages.create(
                         body=f"🔥 MightyApe Deal Alert!\nPrice: ${price:,.2f}\n{url}",
                         from_=whatsapp_from,
@@ -88,4 +90,3 @@ if st.button("🔍 Check Price"):
                 st.info("⏳ Price is still above your target.")
         else:
             st.error("❌ Could not extract price. Check the URL or site structure.")
-s
