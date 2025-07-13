@@ -1,7 +1,4 @@
-requests
-beautifulsoup4
-twilio
-pandas
+streamlit
 selenium
 webdriver-manager
-streamlit  # if you're using a Streamlit interface
+twilio
