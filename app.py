@@ -28,32 +28,39 @@ twilio_to = st.text_input("📱 Your mobile number (e.g. +6421XXXXXXX)")
 def get_mightyape_price(url):
     headers = {
         "User-Agent": (
-            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
-            "(KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.1 Safari/605.1.15"
         ),
-        "Accept-Language": "en-US,en;q=0.9",
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-NZ,en-US;q=0.9,en;q=0.8",
         "Referer": "https://www.google.com/",
+        "Connection": "keep-alive",
+        "Cache-Control": "no-cache",
+        "Upgrade-Insecure-Requests": "1"
     }
-    res = requests.get(url, headers=headers, timeout=10)
-    if res.status_code != 200:
-        st.error(f"❌ HTTP error: {res.status_code}")
+
+    try:
+        response = requests.get(url, headers=headers, timeout=10)
+        if response.status_code != 200:
+            st.error(f"❌ HTTP error: {response.status_code}")
+            return None
+
+        soup = BeautifulSoup(response.text, "html.parser")
+        price_element = soup.find("span", class_="buy-button-price")
+        if price_element:
+            price_text = price_element.text.strip().replace("$", "").replace(",", "")
+            return float(price_text)
+
+        # Fallback: Regex-based extraction
+        match = re.search(r"\$\d+(?:\.\d{2})?", soup.text)
+        if match:
+            return float(match.group().replace("$", ""))
+
+        st.error("⚠️ Price not found on page.")
         return None
-
-    soup = BeautifulSoup(res.text, "html.parser")
-
-    # Extract price from button span
-    span = soup.find("span", class_="buy-button-price")
-    if span:
-        txt = span.get_text(strip=True).replace("$", "").replace(",", "")
-        return float(txt)
-
-    # Fallback regex
-    m = re.search(r"\$\d+(?:\.\d{2})?", soup.text)
-    if m:
-        return float(m.group().replace("$", ""))
-
-    st.error("⚠️ Price element not found; site structure may have changed.")
-    return None
+    except Exception as e:
+        st.error(f"❌ Scraper error: {e}")
+        return None
 
 # ------------------- Main Logic -------------------
 if st.button("🔍 Check Price"):
@@ -69,12 +76,14 @@ if st.button("🔍 Check Price"):
                 client = Client(twilio_sid, twilio_token)
                 try:
                     client.messages.create(
-                        body=f"🔥 Deal! Price is ${price:,.2f}\n{url}",
+                        body=f"🔥 Deal Alert! Price: ${price:,.2f}\n{url}",
                         from_=twilio_from,
                         to=twilio_to
                     )
                     st.success("📲 SMS sent!")
-                except Exception as e:
-                    st.error(f"📵 SMS failed: {e}")
+                except Exception as sms_error:
+                    st.error(f"📵 SMS failed: {sms_error}")
             else:
-                st.info("⏳ Price still above your target.")
+                st.info("⏳ Price is still above your target.")
+        else:
+            st.error("❌ Could not extract price. Check the URL or site structure.")
