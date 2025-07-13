@@ -2,3 +2,6 @@ requests
 beautifulsoup4
 twilio
 pandas
+selenium
+webdriver-manager
+streamlit  # if you're using a Streamlit interface
