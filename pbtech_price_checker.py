@@ -1,24 +1,23 @@
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from webdriver_manager.chrome import ChromeDriverManager
+
 def get_pbtech_price(url):
-    import requests
-    from bs4 import BeautifulSoup
+    options = Options()
+    options.add_argument("--headless")
+    options.add_argument("--disable-gpu")
+    options.add_argument("--no-sandbox")
+    options.add_argument("--disable-dev-shm-usage")
 
-    headers = {"User-Agent": "Mozilla/5.0"}
+    driver = webdriver.Chrome(ChromeDriverManager().install(), options=options)
+
     try:
-        response = requests.get(url, headers=headers, timeout=10)
-        soup = BeautifulSoup(response.text, "html.parser")
-
-        # NEW: Find the price div with data-price attribute
-        price_div = soup.find("div", {"data-price": True})
-        if price_div:
-            return float(price_div["data-price"])
-
-        # FALLBACK: Try old span.price (for older listings)
-        price_span = soup.find("span", class_="price")
-        if price_span:
-            return float(price_span.text.replace("$", "").replace(",", "").strip())
-
+        driver.get(url)
+        price_elem = driver.find_element("css selector", "span.price")
+        price_text = price_elem.text.strip().replace("$", "").replace(",", "")
+        return float(price_text)
     except Exception as e:
-        print(f"Scraper error: {e}")
+        print("Scraping error:", e)
         return None
-
-    return None
+    finally:
+        driver.quit()
