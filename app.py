@@ -8,7 +8,7 @@ from twilio.rest import Client
 try:
     twilio_sid = st.secrets["twilio"]["account_sid"]
     twilio_token = st.secrets["twilio"]["auth_token"]
-    whatsapp_to = st.secrets["twilio"]["whatsapp_to"]  # Your number: whatsapp:+6421XXXXXXX
+    whatsapp_to = st.secrets["twilio"]["whatsapp_to"]  # Format: whatsapp:+6421XXXXXXX
 except KeyError:
     st.error("🔐 Missing Twilio credentials in `.streamlit/secrets.toml`.")
     st.stop()
@@ -88,3 +88,4 @@ if st.button("🔍 Check Price"):
                 st.info("⏳ Price is still above your target.")
         else:
             st.error("❌ Could not extract price. Check the URL or site structure.")
+s
