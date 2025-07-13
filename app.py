@@ -1,140 +1,67 @@
 import streamlit as st
+from bs4 import BeautifulSoup
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.firefox.service import Service
 from selenium.webdriver.firefox.firefox_binary import FirefoxBinary
 from webdriver_manager.firefox import GeckoDriverManager
-from bs4 import BeautifulSoup
-from textblob import TextBlob
-from twilio.rest import Client
-import re
 
-# ------------------- Twilio Config -------------------
-try:
-    twilio_sid = st.secrets["twilio"]["account_sid"]
-    twilio_token = st.secrets["twilio"]["auth_token"]
-    whatsapp_to = st.secrets["twilio"]["whatsapp_to"]
-except KeyError:
-    st.error("🔐 Twilio credentials missing in `.streamlit/secrets.toml`.")
-    st.stop()
+# --- App config ---
+st.set_page_config(page_title="🦍 MightyApe Price Tracker", layout="centered")
+st.title("🦍 MightyApe Price Watcher with Selenium")
 
-whatsapp_from = "whatsapp:+14155238886"
+# --- User Input ---
+url = st.text_input("🔗 Enter MightyApe product URL:")
+target_price = st.number_input("🎯 Target Price (NZD):", min_value=1.0, value=100.0)
 
-# ------------------- Streamlit UI -------------------
-st.set_page_config(page_title="🦍 MightyApe Price Watch", layout="centered")
-st.title("🦍 MightyApe Price Tracker + Smart Advisor")
-
-url = st.text_input("🔗 MightyApe Product URL:")
-target_price = st.number_input("🎯 Target Price (NZD):", min_value=1.0, value=300.0)
-
-# ------------------- URL Cleaner -------------------
-def clean_mightyape_url(raw_url):
-    if "/mn/buy/" in raw_url:
-        match = re.search(r"(\d{7,})/?$", raw_url)
-        if match:
-            product_id = match.group(1)
-            return f"https://www.mightyape.co.nz/product/temp-title/{product_id}"
-    return raw_url
-
-# ------------------- Scraper -------------------
+# --- Scraper using Selenium ---
 def get_product_info_selenium(url):
     options = Options()
     options.headless = True
 
-    # 🔧 Manually set Firefox binary path (update as needed)
-    try:
-        # Linux example
-        binary = FirefoxBinary("/usr/bin/firefox")
-        # Windows example: binary = FirefoxBinary("C:\\Program Files\\Mozilla Firefox\\firefox.exe")
-        # Mac example: binary = FirefoxBinary("/Applications/Firefox.app/Contents/MacOS/firefox")
-        options.binary = binary
-    except Exception as b_err:
-        st.error(f"❌ Could not find Firefox binary: {b_err}")
-        return None, None, None
+    # ✅ Set Firefox binary path for Windows (your system)
+    binary_path = "C:\\Program Files\\Mozilla Firefox\\firefox.exe"
+    binary = FirefoxBinary(binary_path)
+    options.binary = binary
 
     try:
         service = Service(GeckoDriverManager().install())
         driver = webdriver.Firefox(service=service, options=options)
         driver.get(url)
-        st.info("🌐 Loading product page...")
 
         soup = BeautifulSoup(driver.page_source, "html.parser")
         driver.quit()
 
+        # Extract product price
         price_element = soup.find("span", class_="buy-button-price")
-        if not price_element:
-            return None, None, None
+        if price_element:
+            price_text = price_element.text.strip().replace("$", "").replace(",", "")
+            price = float(price_text)
+        else:
+            price = None
 
-        price_text = price_element.text.strip().replace("$", "").replace(",", "")
-        price = float(price_text)
+        # Extract product title
+        title_element = soup.find("h1")
+        title = title_element.text.strip() if title_element else "Unknown Product"
 
-        title = soup.find("h1").text.strip() if soup.find("h1") else "Unknown Product"
-        desc = soup.find("div", class_="product-long-description")
-        description = desc.get_text(strip=True) if desc else ""
-
-        return price, title, description
+        return price, title
 
     except Exception as e:
         st.error(f"❌ Selenium scraper error: {e}")
-        return None, None, None
+        return None, None
 
-# ------------------- Sentiment & Ranking -------------------
-def analyze_sentiment(text):
-    if not text:
-        return 0.0, "Neutral"
-    blob = TextBlob(text)
-    score = blob.sentiment.polarity
-    label = "Positive" if score > 0.2 else "Negative" if score < -0.2 else "Neutral"
-    return round(score * 100, 1), label
-
-def calculate_rank(price, target_price, sentiment_score):
-    price_delta = max(0, min(100, int(((target_price - price) / target_price) * 100)))
-    rank = int((0.6 * price_delta) + (0.4 * sentiment_score))
-    return min(rank, 100)
-
-# ------------------- Main Logic -------------------
+# --- Main logic ---
 if st.button("🔍 Check Price"):
     if not url:
-        st.warning("⚠️ Please enter a valid MightyApe product URL.")
+        st.warning("⚠️ Please enter the product URL.")
     else:
-        final_url = clean_mightyape_url(url)
-        price, title, description = get_product_info_selenium(final_url)
-        sentiment_score, sentiment_label = analyze_sentiment(description)
-
-        if price is not None:
-            price_delta = target_price - price
-            rank_score = calculate_rank(price, target_price, sentiment_score)
-
-            st.success(f"✅ Price: ${price:,.2f}")
-            st.markdown(f"💬 **Sentiment:** {sentiment_label} ({sentiment_score}%)")
-            st.markdown(f"📊 **Ranking Score:** {rank_score}/100")
-            st.markdown(f"🎯 **Savings:** ${price_delta:,.2f}")
-
-            advice = "✅ Buy now!" if rank_score >= 70 else "🤔 Wait or check reviews."
-
+        price, title = get_product_info_selenium(url)
+        if price:
+            st.success(f"✅ {title}\n💰 Current Price: ${price:.2f}")
             if price <= target_price:
                 st.balloons()
-                st.success("🎉 Below target — sending WhatsApp alert...")
-
-                client = Client(twilio_sid, twilio_token)
-                try:
-                    message = client.messages.create(
-                        body=(
-                            f"🔥 MightyApe Deal Alert!\n\n"
-                            f"🛍️ {title}\n"
-                            f"💲 Price: ${price:.2f} (Target: ${target_price:.2f})\n"
-                            f"💬 Sentiment: {sentiment_label} ({sentiment_score}%)\n"
-                            f"📊 Ranking Score: {rank_score}/100\n"
-                            f"🤖 Advice: {advice}\n"
-                            f"🔗 {final_url}"
-                        ),
-                        from_=whatsapp_from,
-                        to=whatsapp_to
-                    )
-                    st.success("📲 WhatsApp message sent!")
-                except Exception as sms_error:
-                    st.error(f"📵 WhatsApp failed: {sms_error}")
+                st.success("🎉 Below your target! Consider buying now!")
             else:
-                st.info("⏳ Price is above your target.")
+                st.info("⏳ Price is still above your target.")
         else:
-            st.error("❌ Could not extract product data.")
+            st.error("❌ Could not extract product data. Check the URL or try again.")
