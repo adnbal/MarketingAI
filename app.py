@@ -25,11 +25,11 @@ url = st.text_input(
 )
 target_price = st.number_input("🎯 Target Price (NZD):", min_value=1.0, value=300.0)
 
-# ------------------- Proxy Scraper Function (NO RETRY) -------------------
+# ------------------- Scraper Using WORKING Proxy -------------------
 def get_product_info(url):
     proxies = {
-        "http": "http://103.152.112.145:80",
-        "https": "http://103.152.112.145:80"
+        "http": "http://185.199.229.156:7492",
+        "https": "http://185.199.229.156:7492"
     }
 
     headers = {
@@ -68,7 +68,7 @@ def get_product_info(url):
         st.error(f"❌ Scraper failed: {e}")
         return None, None, None
 
-# ------------------- Sentiment & Scoring -------------------
+# ------------------- Sentiment & Ranking -------------------
 def analyze_sentiment(text):
     if not text:
         return 0.0, "Neutral"
