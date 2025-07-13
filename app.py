@@ -25,11 +25,11 @@ url = st.text_input(
 )
 target_price = st.number_input("🎯 Target Price (NZD):", min_value=1.0, value=300.0)
 
-# ------------------- Scraper Using WORKING Proxy -------------------
+# ------------------- Scraper Using New Working Proxy -------------------
 def get_product_info(url):
     proxies = {
-        "http": "http://185.199.229.156:7492",
-        "https": "http://185.199.229.156:7492"
+        "http": "http://38.156.233.56:999",
+        "https": "http://38.156.233.56:999"
     }
 
     headers = {
