@@ -14,7 +14,7 @@ except KeyError:
     st.error("🔐 Missing Twilio credentials in `.streamlit/secrets.toml`.")
     st.stop()
 
-whatsapp_from = "whatsapp:+14155238886"
+whatsapp_from = "whatsapp:+14155238886"  # Twilio sandbox number
 
 # ------------------- Streamlit UI -------------------
 st.set_page_config(page_title="🦍 MightyApe Smart Deal Advisor", layout="centered")
@@ -28,16 +28,20 @@ target_price = st.number_input("🎯 Target Price (NZD):", min_value=1.0, value=
 
 # ------------------- Scraper + Sentiment -------------------
 def get_product_info(url):
-    headers = {
+    session = requests.Session()
+    session.headers.update({
         "User-Agent": (
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.1 Safari/605.1.15"
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 "
+            "(KHTML, like Gecko) Chrome/114.0.0.0 Safari/537.36"
         ),
         "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
-    }
+        "Accept-Language": "en-US,en;q=0.9",
+        "Referer": "https://www.google.com/",
+        "Connection": "keep-alive"
+    })
 
     try:
-        res = requests.get(url, headers=headers, timeout=10)
+        res = session.get(url, timeout=10)
         if res.status_code != 200:
             st.error(f"❌ HTTP error: {res.status_code}")
             return None, None, None
