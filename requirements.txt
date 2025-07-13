@@ -1,6 +1,4 @@
 streamlit
-requests
+selenium
 beautifulsoup4
-textblob
-twilio
-Selenium
+webdriver-manager
