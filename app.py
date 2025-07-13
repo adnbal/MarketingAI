@@ -3,8 +3,9 @@ import requests
 from bs4 import BeautifulSoup
 from twilio.rest import Client
 from textblob import TextBlob
+import time
 
-# ------------------- Twilio Config -------------------
+# ------------------- Twilio & API Config -------------------
 try:
     twilio_sid = st.secrets["twilio"]["account_sid"]
     twilio_token = st.secrets["twilio"]["auth_token"]
@@ -17,8 +18,8 @@ except KeyError:
 whatsapp_from = "whatsapp:+14155238886"
 
 # ------------------- Streamlit UI -------------------
-st.set_page_config(page_title="🦍 MightyApe Deal Alert", layout="centered")
-st.title("🦍 MightyApe Price Watcher with Sentiment & WhatsApp Alerts")
+st.set_page_config(page_title="🦍 MightyApe Deal Watcher", layout="centered")
+st.title("🦍 MightyApe Price Alert + Sentiment + Smart Advice")
 
 url = st.text_input(
     "🔗 MightyApe Product URL:",
@@ -26,36 +27,37 @@ url = st.text_input(
 )
 target_price = st.number_input("🎯 Target Price (NZD):", min_value=1.0, value=300.0)
 
-# ------------------- Scraper with Proxy -------------------
+# ------------------- Scraper with Retry -------------------
 def get_product_info(url):
     scraped_url = f"http://api.scraperapi.com/?api_key={scraperapi_key}&url={url}"
 
-    try:
-        res = requests.get(scraped_url, timeout=10)
-        if res.status_code != 200:
-            st.error(f"❌ HTTP error: {res.status_code}")
-            return None, None, None
+    for attempt in range(3):
+        try:
+            res = requests.get(scraped_url, timeout=20)
+            if res.status_code == 200:
+                soup = BeautifulSoup(res.text, "html.parser")
 
-        soup = BeautifulSoup(res.text, "html.parser")
+                price_element = soup.find("span", class_="buy-button-price")
+                if not price_element:
+                    return None, None, None
 
-        price_element = soup.find("span", class_="buy-button-price")
-        if not price_element:
-            st.error("❌ Price element not found.")
-            return None, None, None
+                price_text = price_element.text.strip().replace("$", "").replace(",", "")
+                price = float(price_text)
 
-        price_text = price_element.text.strip().replace("$", "").replace(",", "")
-        price = float(price_text)
+                title = soup.find("h1").text.strip() if soup.find("h1") else "Unknown Product"
 
-        title = soup.find("h1").text.strip() if soup.find("h1") else "Unknown Product"
+                desc = soup.find("div", class_="product-long-description")
+                description = desc.get_text(strip=True) if desc else ""
 
-        desc = soup.find("div", class_="product-long-description")
-        description = desc.get_text(strip=True) if desc else ""
+                return price, title, description
+            else:
+                st.warning(f"⚠️ Attempt {attempt+1}: HTTP {res.status_code}")
+        except requests.exceptions.ReadTimeout:
+            st.warning(f"⏳ Attempt {attempt+1}: Scraper timed out. Retrying...")
+            time.sleep(2)
 
-        return price, title, description
-
-    except Exception as e:
-        st.error(f"❌ Scraper failed: {e}")
-        return None, None, None
+    st.error("❌ Scraper failed after 3 retries.")
+    return None, None, None
 
 # ------------------- Sentiment & Scoring -------------------
 def analyze_sentiment(text):
@@ -74,7 +76,7 @@ def calculate_rank(price, target_price, sentiment_score):
 # ------------------- Main App Logic -------------------
 if st.button("🔍 Check Price"):
     if not url:
-        st.warning("⚠️ Please enter a valid product URL.")
+        st.warning("⚠️ Please enter a product URL.")
     else:
         price, title, description = get_product_info(url)
         sentiment_score, sentiment_label = analyze_sentiment(description)
@@ -86,13 +88,13 @@ if st.button("🔍 Check Price"):
             st.success(f"✅ Price: ${price:,.2f}")
             st.markdown(f"💬 **Sentiment:** {sentiment_label} ({sentiment_score}%)")
             st.markdown(f"📊 **Ranking Score:** {rank_score}/100")
-            st.markdown(f"🎯 **Savings vs Target:** ${price_delta:,.2f}")
+            st.markdown(f"🎯 **You Save:** ${price_delta:,.2f}")
 
-            advice = "✅ Buy now!" if rank_score >= 70 else "🤔 Wait or read reviews."
+            advice = "✅ Buy now!" if rank_score >= 70 else "🤔 Wait or check reviews."
 
             if price <= target_price:
                 st.balloons()
-                st.success("🎉 Below your target — sending WhatsApp alert...")
+                st.success("🎉 Deal found — sending WhatsApp alert...")
 
                 client = Client(twilio_sid, twilio_token)
                 try:
@@ -113,6 +115,6 @@ if st.button("🔍 Check Price"):
                 except Exception as sms_error:
                     st.error(f"📵 WhatsApp failed: {sms_error}")
             else:
-                st.info("⏳ Price is above your target.")
+                st.info("⏳ Price is still above your target.")
         else:
             st.error("❌ Could not extract product data.")
