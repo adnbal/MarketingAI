@@ -1,19 +1,14 @@
-import requests
-from bs4 import BeautifulSoup
-
-def get_price_noel_leeming(url):
-    headers = {
-        "User-Agent": "Mozilla/5.0"
-    }
+def get_pbtech_price(url):
+    headers = {"User-Agent": "Mozilla/5.0"}
     r = requests.get(url, headers=headers)
     soup = BeautifulSoup(r.text, "html.parser")
 
-    # 🎯 Extract price (Noel Leeming uses this class for price)
-    price_element = soup.select_one(".price-box .price")
-    
-    if price_element:
-        price_str = price_element.text.strip().replace("$", "").replace(",", "")
+    # PBTech uses span.price on product pages
+    price_span = soup.select_one("span.price")
+
+    if price_span:
         try:
+            price_str = price_span.text.replace("$", "").replace(",", "").strip()
             return float(price_str)
         except:
             return None
