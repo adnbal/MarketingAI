@@ -2,6 +2,7 @@ import streamlit as st
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
 from selenium.webdriver.firefox.service import Service
+from selenium.webdriver.firefox.firefox_binary import FirefoxBinary
 from webdriver_manager.firefox import GeckoDriverManager
 from bs4 import BeautifulSoup
 from textblob import TextBlob
@@ -20,8 +21,8 @@ except KeyError:
 whatsapp_from = "whatsapp:+14155238886"
 
 # ------------------- Streamlit UI -------------------
-st.set_page_config(page_title="🦍 MightyApe Deal Watcher", layout="centered")
-st.title("🦍 MightyApe Price Alert + Smart Advice")
+st.set_page_config(page_title="🦍 MightyApe Price Watch", layout="centered")
+st.title("🦍 MightyApe Price Tracker + Smart Advisor")
 
 url = st.text_input("🔗 MightyApe Product URL:")
 target_price = st.number_input("🎯 Target Price (NZD):", min_value=1.0, value=300.0)
@@ -35,10 +36,21 @@ def clean_mightyape_url(raw_url):
             return f"https://www.mightyape.co.nz/product/temp-title/{product_id}"
     return raw_url
 
-# ------------------- Selenium Scraper -------------------
+# ------------------- Scraper -------------------
 def get_product_info_selenium(url):
     options = Options()
-    options.add_argument("--headless")
+    options.headless = True
+
+    # 🔧 Manually set Firefox binary path (update as needed)
+    try:
+        # Linux example
+        binary = FirefoxBinary("/usr/bin/firefox")
+        # Windows example: binary = FirefoxBinary("C:\\Program Files\\Mozilla Firefox\\firefox.exe")
+        # Mac example: binary = FirefoxBinary("/Applications/Firefox.app/Contents/MacOS/firefox")
+        options.binary = binary
+    except Exception as b_err:
+        st.error(f"❌ Could not find Firefox binary: {b_err}")
+        return None, None, None
 
     try:
         service = Service(GeckoDriverManager().install())
