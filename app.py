@@ -3,7 +3,6 @@ import requests
 from bs4 import BeautifulSoup
 from twilio.rest import Client
 from textblob import TextBlob
-import time
 
 # ------------------- Twilio Config -------------------
 try:
@@ -26,7 +25,7 @@ url = st.text_input(
 )
 target_price = st.number_input("🎯 Target Price (NZD):", min_value=1.0, value=300.0)
 
-# ------------------- Proxy Scraper Function -------------------
+# ------------------- Proxy Scraper Function (NO RETRY) -------------------
 def get_product_info(url):
     proxies = {
         "http": "http://103.152.112.145:80",
@@ -43,33 +42,31 @@ def get_product_info(url):
         "Referer": "https://www.google.com/"
     }
 
-    for attempt in range(3):
-        try:
-            res = requests.get(url, headers=headers, proxies=proxies, timeout=15)
-            if res.status_code == 200:
-                soup = BeautifulSoup(res.text, "html.parser")
+    try:
+        res = requests.get(url, headers=headers, proxies=proxies, timeout=15)
+        if res.status_code == 200:
+            soup = BeautifulSoup(res.text, "html.parser")
 
-                price_element = soup.find("span", class_="buy-button-price")
-                if not price_element:
-                    return None, None, None
+            price_element = soup.find("span", class_="buy-button-price")
+            if not price_element:
+                return None, None, None
 
-                price_text = price_element.text.strip().replace("$", "").replace(",", "")
-                price = float(price_text)
+            price_text = price_element.text.strip().replace("$", "").replace(",", "")
+            price = float(price_text)
 
-                title = soup.find("h1").text.strip() if soup.find("h1") else "Unknown Product"
+            title = soup.find("h1").text.strip() if soup.find("h1") else "Unknown Product"
 
-                desc = soup.find("div", class_="product-long-description")
-                description = desc.get_text(strip=True) if desc else ""
+            desc = soup.find("div", class_="product-long-description")
+            description = desc.get_text(strip=True) if desc else ""
 
-                return price, title, description
-            else:
-                st.warning(f"⚠️ Attempt {attempt+1}: HTTP {res.status_code}")
-        except Exception as e:
-            st.warning(f"⏳ Attempt {attempt+1} failed: {e}")
-            time.sleep(2)
+            return price, title, description
+        else:
+            st.error(f"❌ HTTP error: {res.status_code}")
+            return None, None, None
 
-    st.error("❌ Proxy scraper failed after 3 retries.")
-    return None, None, None
+    except Exception as e:
+        st.error(f"❌ Scraper failed: {e}")
+        return None, None, None
 
 # ------------------- Sentiment & Scoring -------------------
 def analyze_sentiment(text):
