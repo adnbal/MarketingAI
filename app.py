@@ -1,6 +1,7 @@
 import streamlit as st
 from selenium import webdriver
 from selenium.webdriver.firefox.options import Options
+from selenium.webdriver.firefox.service import Service
 from webdriver_manager.firefox import GeckoDriverManager
 from bs4 import BeautifulSoup
 from textblob import TextBlob
@@ -37,10 +38,11 @@ def clean_mightyape_url(raw_url):
 # ------------------- Selenium Scraper -------------------
 def get_product_info_selenium(url):
     options = Options()
-    options.headless = True
+    options.add_argument("--headless")
 
     try:
-        driver = webdriver.Firefox(executable_path=GeckoDriverManager().install(), options=options)
+        service = Service(GeckoDriverManager().install())
+        driver = webdriver.Firefox(service=service, options=options)
         driver.get(url)
         st.info("🌐 Loading product page...")
 
