@@ -25,13 +25,8 @@ url = st.text_input(
 )
 target_price = st.number_input("🎯 Target Price (NZD):", min_value=1.0, value=300.0)
 
-# ------------------- Scraper Using New Working Proxy -------------------
+# ------------------- Scraper (No Proxy) -------------------
 def get_product_info(url):
-    proxies = {
-        "http": "http://38.156.233.56:999",
-        "https": "http://38.156.233.56:999"
-    }
-
     headers = {
         "User-Agent": (
             "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:117.0) "
@@ -43,7 +38,7 @@ def get_product_info(url):
     }
 
     try:
-        res = requests.get(url, headers=headers, proxies=proxies, timeout=15)
+        res = requests.get(url, headers=headers, timeout=15)
         if res.status_code == 200:
             soup = BeautifulSoup(res.text, "html.parser")
 
