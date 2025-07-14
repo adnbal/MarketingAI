@@ -8,33 +8,42 @@ from twilio.rest import Client
 try:
     twilio_sid = st.secrets["twilio"]["account_sid"]
     twilio_token = st.secrets["twilio"]["auth_token"]
-    whatsapp_to = st.secrets["twilio"]["whatsapp_to"]
+    whatsapp_to = st.secrets["twilio"]["whatsapp_to"]  # Your number: whatsapp:+6421XXXXXXX
 except KeyError:
     st.error("🔐 Missing Twilio credentials in `.streamlit/secrets.toml`.")
     st.stop()
 
-whatsapp_from = "whatsapp:+14155238886"  # Twilio Sandbox
+whatsapp_from = "whatsapp:+14155238886"  # Twilio Sandbox number
 
 # ------------------- Streamlit UI -------------------
-st.set_page_config(page_title="🦍 Price Tracker with AI Advice", layout="centered")
-st.title("🦍 Price Watcher + AI Advice via WhatsApp")
+st.set_page_config(page_title="🦍 MightyApe Price Tracker", layout="centered")
+st.title("🦍 MightyApe Price Watcher with WhatsApp Alerts")
 
-url = st.text_input("🔗 Product URL (MightyApe):", 
-                    value="https://www.mightyape.co.nz/product/playstation-5-console/34510783")
+url = st.text_input(
+    "🔗 MightyApe product URL:",
+    value="https://www.mightyape.co.nz/mn/buy/mighty-ape-ape-basics-heated-2-in-1-shiatsu-foot-and-back-massager-35128615/"
+)
+target_price = st.number_input("🎯 Target Price (NZD):", min_value=1.0, value=300.0)
 
-target_price = st.number_input("🎯 Target Price (NZD):", min_value=1.0, value=800.0)
-
-# ------------------- Price Scraper -------------------
-def get_price(url):
+# ------------------- Scraper Function -------------------
+def get_mightyape_price(url):
     headers = {
-        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Safari/537.36",
-        "Accept-Language": "en-US,en;q=0.9"
+        "User-Agent": (
+            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
+            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.1 Safari/605.1.15"
+        ),
+        "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
+        "Accept-Language": "en-NZ,en-US;q=0.9,en;q=0.8",
+        "Referer": "https://www.google.com/",
+        "Connection": "keep-alive",
+        "Cache-Control": "no-cache",
+        "Upgrade-Insecure-Requests": "1"
     }
 
     try:
         res = requests.get(url, headers=headers, timeout=10)
-        if res.status_code == 403:
-            st.error("❌ HTTP 403 Forbidden: MightyApe may be blocking the scraper.")
+        if res.status_code != 200:
+            st.error(f"❌ HTTP error: {res.status_code}")
             return None
 
         soup = BeautifulSoup(res.text, "html.parser")
@@ -46,46 +55,29 @@ def get_price(url):
         match = re.search(r"\$\d+(?:\.\d{2})?", soup.text)
         if match:
             return float(match.group().replace("$", ""))
+
+        st.error("⚠️ Price not found.")
         return None
     except Exception as e:
         st.error(f"❌ Scraper error: {e}")
         return None
 
-# ------------------- Dummy Sentiment Advice -------------------
-def dummy_sentiment_advice(price, target_price):
-    if price <= target_price:
-        return "👍 Great deal! Customers seem happy and price is within your range."
-    elif price <= target_price * 1.1:
-        return "🤔 Almost there. Maybe wait a bit longer or look at recent reviews."
-    else:
-        return "❌ Too expensive right now. Hold off unless urgent."
-
 # ------------------- Main Logic -------------------
 if st.button("🔍 Check Price"):
     if not url:
-        st.warning("⚠️ Please enter a valid product URL.")
+        st.warning("⚠️ Please enter the product URL.")
     else:
-        price = get_price(url)
+        price = get_mightyape_price(url)
         if price is not None:
             st.success(f"✅ Current Price: ${price:,.2f}")
-            advice = dummy_sentiment_advice(price, target_price)
-            st.info(advice)
-
             if price <= target_price:
                 st.balloons()
-                st.success("🎉 Price is below target. Sending WhatsApp alert...")
+                st.success("🎉 Below your target! Sending WhatsApp alert...")
 
-                message_body = (
-                    f"🔥 MightyApe Deal Alert!\n\n"
-                    f"Product: {url}\n"
-                    f"Current Price: ${price:,.2f}\n"
-                    f"AI Advice: {advice}"
-                )
-
+                client = Client(twilio_sid, twilio_token)
                 try:
-                    client = Client(twilio_sid, twilio_token)
-                    client.messages.create(
-                        body=message_body,
+                    message = client.messages.create(
+                        body=f"🔥 MightyApe Deal Alert!\nPrice: ${price:,.2f}\n{url}",
                         from_=whatsapp_from,
                         to=whatsapp_to
                     )
@@ -93,6 +85,7 @@ if st.button("🔍 Check Price"):
                 except Exception as sms_error:
                     st.error(f"📵 WhatsApp failed: {sms_error}")
             else:
-                st.info("⏳ Still above your target. No alert sent.")
+                st.info("⏳ Price is still above your target.")
         else:
-            st.error("❌ Could not extract price. Check the URL or try later.")
+            st.error("❌ Could not extract price. Check the URL or site structure.")
+
