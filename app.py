@@ -191,3 +191,4 @@ if uploaded_file:
     if user_q:
         ai_a = ask_deepseek(f"Q: {user_q}\nContext: {cv_summary}")
         st.markdown(f"**🧠 AI Answer:** {ai_a}")
+   
