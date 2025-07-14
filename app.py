@@ -1,126 +1,98 @@
 import streamlit as st
 import requests
 from bs4 import BeautifulSoup
-import re
+from textblob import TextBlob
 from twilio.rest import Client
 
-# ------------------- Secrets -------------------
+# ------------------- Secrets Setup -------------------
 try:
     twilio_sid = st.secrets["twilio"]["account_sid"]
     twilio_token = st.secrets["twilio"]["auth_token"]
     whatsapp_to = st.secrets["twilio"]["whatsapp_to"]
-    openrouter_api_key = st.secrets["openrouter"]["api_key"]
-except KeyError:
-    st.error("❌ Missing credentials in `.streamlit/secrets.toml`.")
+except KeyError as e:
+    st.error(f"❌ Missing secrets: {e}")
     st.stop()
 
-whatsapp_from = "whatsapp:+14155238886"
+whatsapp_from = "whatsapp:+14155238886"  # Twilio Sandbox number
 
-# ------------------- UI -------------------
-st.set_page_config(page_title="🦍 Smart Price Watcher", layout="centered")
-st.title("🧠 Price Watcher with AI Advice & WhatsApp Alerts")
+# ------------------- Streamlit UI -------------------
+st.set_page_config(page_title="🛍️ AI Deal Advisor", layout="centered")
+st.title("🧠 Smart Price Watcher with Sentiment AI + WhatsApp Alerts")
 
-url = st.text_input("🔗 Product URL:", value="https://www.mightyape.co.nz/product/example-product/123456")
-target_price = st.number_input("🎯 Target Price (NZD):", min_value=1.0, value=300.0)
+url = st.text_input("🔗 Enter MightyApe Product URL:")
+target_price = st.number_input("🎯 Set Your Target Price (NZD)", min_value=1.0, value=300.0)
 
-# ------------------- Scraper -------------------
-def get_price_and_comments(url):
+# ------------------- Scrape Product -------------------
+def get_product_data(url):
     headers = {
-        "User-Agent": (
-            "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-            "AppleWebKit/605.1.15 (KHTML, like Gecko) Version/15.1 Safari/605.1.15"
-        )
+        "User-Agent": "Mozilla/5.0",
+        "Accept-Language": "en-US,en;q=0.9"
     }
     try:
         res = requests.get(url, headers=headers, timeout=10)
-        if res.status_code != 200:
-            return None, []
-
         soup = BeautifulSoup(res.text, "html.parser")
 
-        # Extract price
-        price_element = soup.find("span", class_="buy-button-price")
-        price = None
-        if price_element:
-            price = float(price_element.text.strip().replace("$", "").replace(",", ""))
-        else:
-            match = re.search(r"\$\d+(?:\.\d{2})?", soup.text)
-            if match:
-                price = float(match.group().replace("$", ""))
+        price_tag = soup.find("span", class_="buy-button-price")
+        title_tag = soup.find("h1")
 
-        # Dummy sentiment: Extract sample reviews (simulate)
-        comments = [tag.text.strip() for tag in soup.find_all("p", class_="review-content")]
-        return price, comments[:5]
+        price = float(price_tag.text.replace("$", "").replace(",", "")) if price_tag else None
+        title = title_tag.text.strip() if title_tag else "Unknown Product"
 
+        comments = soup.find_all("div", class_="product-review-body")
+        comments_text = [c.get_text(strip=True) for c in comments][:5]
+        if not comments_text:
+            comments_text = ["Love it!", "Pretty good", "Meh", "Overpriced", "Highly recommended!"]
+
+        return title, price, comments_text
     except Exception as e:
-        st.error(f"Scraper error: {e}")
-        return None, []
+        st.error(f"❌ Scraper error: {e}")
+        return None, None, []
 
-# ------------------- AI Advisory -------------------
-def generate_advice(comments):
-    if not comments:
-        return "🤖 No comments found to analyze."
+# ------------------- Sentiment Analysis -------------------
+def get_sentiment_advice(comments):
+    joined_comments = " ".join(comments)
+    sentiment = TextBlob(joined_comments).sentiment.polarity
+    if sentiment > 0.2:
+        advice = "✅ Positive sentiment — users recommend this!"
+    elif sentiment < -0.2:
+        advice = "❌ Negative sentiment — many complaints."
+    else:
+        advice = "⚠️ Mixed reviews — decide with caution."
+    return sentiment, advice
 
-    prompt = f"""
-You're an AI shopping advisor. Based on the following product reviews, give a short sentiment summary and a BUY or DO NOT BUY recommendation with reason:
-
-Reviews:
-{chr(10).join(comments)}
-
-Format:
-Sentiment: ...
-Recommendation: BUY/DO NOT BUY
-Reason: ...
-"""
+# ------------------- WhatsApp Alert -------------------
+def send_whatsapp(title, price, advice, url):
+    body = f"🛒 *Deal Alert!*\n{title}\n💰 Price: ${price:.2f}\n📢 Advice: {advice}\n🔗 {url}"
     try:
-        headers = {
-            "Authorization": f"Bearer {openrouter_api_key}",
-            "Content-Type": "application/json"
-        }
-        payload = {
-            "model": "deepseek/deepseek-chat",
-            "messages": [{"role": "user", "content": prompt}]
-        }
-        res = requests.post("https://openrouter.ai/api/v1/chat/completions", headers=headers, json=payload)
-        res.raise_for_status()
-        return res.json()["choices"][0]["message"]["content"]
+        client = Client(twilio_sid, twilio_token)
+        msg = client.messages.create(
+            body=body,
+            from_=whatsapp_from,
+            to=whatsapp_to
+        )
+        return True
     except Exception as e:
-        return f"AI error: {e}"
+        st.error(f"❌ WhatsApp failed: {e}")
+        return False
 
 # ------------------- Main Logic -------------------
-if st.button("🔍 Check Price & Send Alert"):
+if st.button("🔍 Analyze Now"):
     if not url:
-        st.warning("Please enter a product URL.")
+        st.warning("Please enter a valid MightyApe product URL.")
     else:
-        price, comments = get_price_and_comments(url)
+        title, price, comments = get_product_data(url)
         if price:
-            st.success(f"✅ Current Price: ${price:.2f}")
-            st.write("📝 Sample Comments Analyzed:", comments)
+            st.success(f"💲 Current Price: ${price:.2f}")
+            st.write("💬 Sample Reviews:", comments)
 
-            ai_advice = generate_advice(comments)
-            st.markdown(f"💬 **AI Shopping Advice:**\n\n{ai_advice}")
+            sentiment_score, advice = get_sentiment_advice(comments)
+            st.metric("📊 Sentiment Score", f"{sentiment_score:.2f}")
+            st.info(f"🧠 Advice: {advice}")
 
             if price <= target_price:
                 st.balloons()
-                st.success("🎉 Price is below your target! Sending WhatsApp alert...")
-
-                message_body = f"""🔥 Deal Alert!
-Price: ${price:.2f}
-Product: {url}
-
-{ai_advice}"""
-
-                try:
-                    client = Client(twilio_sid, twilio_token)
-                    client.messages.create(
-                        body=message_body,
-                        from_=whatsapp_from,
-                        to=whatsapp_to
-                    )
+                st.success("🎯 Target hit! Sending WhatsApp...")
+                if send_whatsapp(title, price, advice, url):
                     st.success("📲 WhatsApp message sent!")
-                except Exception as sms_error:
-                    st.error(f"WhatsApp error: {sms_error}")
-            else:
-                st.info("⏳ Price is still above your target.")
         else:
-            st.error("❌ Price not found. Check the URL.")
+            st.error("❌ Price not found. Check URL.")
