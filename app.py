@@ -17,8 +17,8 @@ except KeyError:
 whatsapp_from = "whatsapp:+14155238886"
 
 # ------------------- UI -------------------
-st.set_page_config(page_title="🦍 Price Watcher AI Advisor", layout="centered")
-st.title("🧠 Smart Price Watcher with AI Advice & WhatsApp Alerts")
+st.set_page_config(page_title="🦍 Smart Price Watcher", layout="centered")
+st.title("🧠 Price Watcher with AI Advice & WhatsApp Alerts")
 
 url = st.text_input("🔗 Product URL:", value="https://www.mightyape.co.nz/product/example-product/123456")
 target_price = st.number_input("🎯 Target Price (NZD):", min_value=1.0, value=300.0)
@@ -48,7 +48,7 @@ def get_price_and_comments(url):
             if match:
                 price = float(match.group().replace("$", ""))
 
-        # Simulate comment extraction
+        # Dummy sentiment: Extract sample reviews (simulate)
         comments = [tag.text.strip() for tag in soup.find_all("p", class_="review-content")]
         return price, comments[:5]
 
@@ -95,12 +95,7 @@ if st.button("🔍 Check Price & Send Alert"):
         price, comments = get_price_and_comments(url)
         if price:
             st.success(f"✅ Current Price: ${price:.2f}")
-            if comments:
-                st.write("📝 Sample Comments Analyzed:")
-                for c in comments:
-                    st.markdown(f"- {c}")
-            else:
-                st.info("No comments available.")
+            st.write("📝 Sample Comments Analyzed:", comments)
 
             ai_advice = generate_advice(comments)
             st.markdown(f"💬 **AI Shopping Advice:**\n\n{ai_advice}")
